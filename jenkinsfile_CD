@@ -1,0 +1,99 @@
+pipeline{
+
+    agent any
+
+    parameters{
+
+        choice(name: 'action', choices:'apply\ndelete', description: 'apply or delete the application files on eks')
+        string (name: 'cluster', defaultValue:'eks-cluster', description:'Choose EKS Cluster Name')
+        string (name: 'region', defaultValue:'us-east-1', description:'Choose AWS region of cluster')
+    }
+
+    environment{
+
+        ACCESS_KEY = credentials('AWS_ACCESS_KEY_ID')
+        SECRET_KEY = credentials('AWS_SECRET_KEY_ID')
+
+    }
+
+    stages{
+
+        stage('Git checkout'){
+
+            steps{
+
+                script{
+
+                    git branch: 'main', url: 'https://github.com/Mbianda2022/mrdevops_java_app.git'
+
+                }
+            }
+        }
+    stage('Connect with Cluster'){
+
+        steps{
+
+            script{
+
+                sh"""
+                 aws configure set aws_access_key_id "$ACCESS_KEY"
+                 aws configure set aws_secret_access_key "$SECRET_KEY"
+                 aws configure set region "${params.region}"
+
+                aws eks --region ${params.region} update-kubeconfig --name ${params.cluster}
+                """
+            }
+        }
+    }
+    stage('Deployment on eks cluster'){
+        
+        when{ expression { params.action == 'apply'} }
+        steps{
+
+            script{
+
+               def apply = false
+
+               try{
+                input message: 'please confirm apply to initiate the deployment',  ok: 'Ready to apply the config ?'
+                apply = true
+               }catch(err){
+                apply = false
+                currentBuild.result ='UNSTABLE'
+               }
+               if(apply){
+                sh """
+                    kubectl apply -f .
+                """
+               }
+            }
+        }
+    }
+     stage('Delete on eks cluster'){
+        
+        when{ expression { params.action == 'delete'} }
+        steps{
+
+            script{
+
+               def delete = false
+
+               try{
+                input message: 'please confirm delete to delete the deployment',  ok: 'Ready to apply the config ?'
+                delete = true
+               }catch(err){
+                delete = false
+                currentBuild.result ='UNSTABLE'
+               }
+               if(delete){
+                sh """
+                    kubectl delete -f .
+                """
+               }
+            }
+        }
+    }    
+   
+    }
+
+}
